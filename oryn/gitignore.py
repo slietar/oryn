@@ -13,7 +13,7 @@ class MatchRule:
   pattern: re.Pattern
 
   def match(self, path: PathLike | str):
-    return self.pattern.match(str(path)) is not None
+    return self.pattern.search(str(path)) is not None
 
   @classmethod
   def parse(cls, raw_rule: str):
