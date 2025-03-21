@@ -1,29 +1,11 @@
 import os
-import subprocess
-import tomllib
 from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
-from .gitignore import MatchRule
-
+from .util import IgnoreRules, get_ignore_rules, read_metadata
 
 ENABLE_COLOR = 'NO_COLOR' not in os.environ
-
-DEFAULT_RULES = [
-  MatchRule.parse(r) for r in [
-    '*',
-    '!*/',
-    '!*.py',
-
-    '__pycache__',
-    '.DS_Store',
-    '.git',
-    '.gitignore',
-    '.venv',
-    '*.egg-info',
-  ]
-]
 
 
 @dataclass(slots=True)
@@ -53,7 +35,7 @@ class HierarchyNode:
     ])
 
 
-def find_matching_paths(root_path: Path, ignore_rules: list[MatchRule]):
+def compute_tree(root_path: Path, ignore_rules: IgnoreRules):
   queue: list[Optional[tuple[HierarchyNode, Path]]] = [(HierarchyNode('.', ignored=False), Path('.'))]
   ancestors = list[HierarchyNode]()
 
@@ -75,78 +57,33 @@ def find_matching_paths(root_path: Path, ignore_rules: list[MatchRule]):
       relative_path_test = f'/{current_path / child_path.name}'
       # print('  ->', relative_path_test)
 
-      matched = False
+      ignored = ignore_rules.match(relative_path_test, directory=is_directory)
 
-      for rule in ignore_rules:
-        if (rule.negated == matched) and rule.match(relative_path_test) and ((not rule.directory) or is_directory):
-          matched = not rule.negated
+      if is_directory or child_path.is_file():
+        node = HierarchyNode(
+          child_path.name + ('/' if is_directory else ''),
+          ignored=ignored,
+        )
 
-      node = HierarchyNode(
-        child_path.name + ('/' if is_directory else ''),
-        ignored=matched,
-      )
+        ancestors[-1].children.append(node)
 
-      ancestors[-1].children.append(node)
-
-      if (not matched) and is_directory:
-        queue.append(None)
-        queue.append((node, current_path / child_path.name))
+        if (not ignored) and is_directory:
+          queue.append(None)
+          queue.append((node, current_path / child_path.name))
 
   return ancestors[0]
-
-
-def find_git_ignored_paths(root_path: Path):
-  # See: https://git-scm.com/docs/git-status#_short_format
-  process = subprocess.run(['git', 'status', '--ignored', '--short'], cwd=root_path, capture_output=True, text=True)
-  print(process.stderr)
-
-  if process.returncode != 0:
-    raise ValueError('Failed to run git status:', process.stderr)
-
-  # untracked = list[Path]()
-  ignored = list[str]()
-
-  for line in process.stdout.splitlines():
-    path = line[3:]
-
-    match line[:2]:
-      case '!!':
-        ignored.append(path)
-      # case '??':
-      #   untracked.append(path)
-      case _:
-        pass
-
-  return ignored
 
 
 if __name__ == '__main__':
   current_path = Path.cwd()
 
-  with (current_path / 'pyproject.toml').open('rb') as metadata_file:
-    metadata = tomllib.load(metadata_file)
-
-  if ('tool' in metadata) and ('oryn' in metadata['tool']):
-    tool_metadata: dict[str, Any] = metadata['tool']['oryn']
-  else:
-    tool_metadata = {}
-
-  match tool_metadata.get('mode', 'default'):
-    case 'default':
-      ignore_rules = DEFAULT_RULES
-    case 'gitignore':
-      ignore_rules = [MatchRule.parse('.git')] + [MatchRule.parse('/' + p) for p in find_git_ignored_paths(current_path)]
-    case _:
-      raise ValueError('Invalid mode:', tool_metadata['mode'])
-
-  if 'ignore' in tool_metadata:
-    ignore_rules += [MatchRule.parse(r) for r in tool_metadata['ignore']]
-
+  _, tool_metadata = read_metadata(current_path)
+  ignore_rules = get_ignore_rules(current_path, tool_metadata)
 
   # from pprint import pprint
   # pprint(ignore_rules)
   # print(MatchRule.parse('__pycache__'))
 
   print('Files included in the build:')
-  root_node = find_matching_paths(current_path, ignore_rules)
+  root_node = compute_tree(current_path, ignore_rules)
   print(root_node.format())

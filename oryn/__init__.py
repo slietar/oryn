@@ -1,14 +1,16 @@
 import csv
 import re
+import shutil
 import tomllib
 from io import StringIO
 from pathlib import Path
 from pprint import pprint
+from zipfile import Path as ZipInfo
 from zipfile import ZipFile
 
 from packaging.version import InvalidVersion, Version
 
-from .gitignore import MatchRule, parse_gitignore
+from .util import IgnoreRules, get_ignore_rules, read_metadata
 
 
 # See: https://packaging.python.org/en/latest/specifications/name-normalization/#name-normalization
@@ -17,6 +19,28 @@ def is_name_valid(unnormalized_name: str, /):
 
 def normalize_name(name: str, /):
   return re.sub(r'[-_.]+', '-', name).lower()
+
+
+def find_targets(root_path: Path, ignore_rules: IgnoreRules):
+  queue = [Path('.')]
+
+  while queue:
+    current_relative_path = queue.pop()
+    current_path = root_path / current_relative_path
+
+    for child_path in sorted(current_path.iterdir(), key=(lambda path: path.name)):
+      is_directory = child_path.is_dir()
+
+      child_relative_path = current_relative_path / child_path.name
+      relative_path_test = f'/{child_relative_path}'
+
+      ignored = ignore_rules.match(relative_path_test, directory=is_directory)
+
+      if not ignored:
+        if is_directory:
+          queue.append(child_relative_path)
+        elif child_path.is_file():
+          yield child_relative_path
 
 
 def build_wheel(wheel_directory: str, config_settings = None, metadata_directory = None):
@@ -50,75 +74,10 @@ def build_wheel(wheel_directory: str, config_settings = None, metadata_directory
 
   # Find targets
 
-  default_rules = [MatchRule.parse(r) for r in [
-    '.DS_Store',
-    '.git',
-    '*.egg-info',
-    '.gitignore',
-    '/pyproject.toml',
-  ]]
-
   root_path = Path.cwd()
-  queue = [root_path]
-  current_parts = list[tuple[Path, list[MatchRule]]]()
-  targets = list[Path]() # Relative to root_path
 
-  while queue:
-    current_path = queue.pop()
-    gitignore_path = current_path / '.gitignore'
-
-    # print('+', current_path)
-
-    for part_index in range(len(current_parts) - 1, -1, -1):
-      part_path, _ = current_parts[part_index]
-
-      if not part_path in current_path.parents:
-        current_parts.pop()
-        # print('    Popping:', part_path)
-
-    if gitignore_path.exists():
-      with gitignore_path.open() as gitignore_file:
-        rules = parse_gitignore(gitignore_file)
-        current_parts.append((current_path, rules))
-    # else:
-    #   rules = []
-
-    for child_path in current_path.iterdir():
-      # print('  ->', child_path)
-
-      relative_path = child_path.relative_to(current_path)
-      is_directory = child_path.is_dir()
-
-      relative_path_test = '/' + str(relative_path)
-      matched = False
-
-      for rule in default_rules:
-        if rule.match(relative_path_test) and ((not rule.directory) or is_directory):
-          matched = not rule.negated
-
-      for _, part_rules in current_parts:
-        for rule in part_rules:
-          if rule.match(relative_path_test) and ((not rule.directory) or is_directory):
-            matched = not rule.negated
-
-        if matched:
-          break
-
-      if matched:
-        continue
-
-      if is_directory:
-        queue.append(child_path)
-
-      # print('Adding:', child_path)
-      targets.append(child_path.relative_to(root_path))
-
-      # with archive.
-
-    # print(current_parts)
-
-  # print('Targets:')
-  # pprint(targets)
+  _, tool_metadata = read_metadata(root_path)
+  ignore_rules = get_ignore_rules(root_path, tool_metadata)
 
 
   # Write wheel
@@ -128,8 +87,8 @@ def build_wheel(wheel_directory: str, config_settings = None, metadata_directory
   with ZipFile(Path(wheel_directory) / wheel_file_name, 'w') as archive:
     # See: https://packaging.python.org/en/latest/specifications/recording-installed-packages/
     dist_info_path = Path(f'{name}-{version}.dist-info')
-    # archive.mkdir(str(dist_info_path))
 
+    # with ZipPath(archive, str(dist_info_path / 'WHEEL')).open('w') as wheel_file:
     with archive.open(str(dist_info_path / 'WHEEL'), 'w') as wheel_file:
       wheel_file.write(f'Wheel-Version: 1.0\n'.encode())
 
@@ -139,36 +98,34 @@ def build_wheel(wheel_directory: str, config_settings = None, metadata_directory
     record_output = StringIO()
     record_writer = csv.writer(record_output, delimiter=',', lineterminator='\n')
 
-    record_paths = [
+    for record_path in [
       dist_info_path / 'METADATA',
       dist_info_path / 'WHEEL',
       dist_info_path / 'RECORD',
-    ]
+    ]:
+      record_writer.writerow([str(record_path), '', ''])
 
     # Copy targets
 
-    for target_path in targets:
+    for target_path in find_targets(root_path, ignore_rules):
+      target_path_str = str(target_path)
+      target_info = ZipInfo(target_path_str)
+
       source_path = root_path / target_path
 
-      # if source_path.is_dir():
-      #   pass
-      # else:
+      # Using this instead of archive.write() to erase timestamp
+      with source_path.open('rb') as source_file, archive.open(target_info, 'w') as target_file:
+        shutil.copyfileobj(source_file, target_file, 1024 * 8)
 
-      # TODO: Maybe erase timestamp
-      if source_path.is_file():
-        archive.write(source_path, str(target_path))
-        record_paths.append(target_path)
-
-      # archive.write(target_path, str(target_path
-
-    for record_path in record_paths:
-      record_writer.writerow([str(record_path), '', ''])
+      record_writer.writerow([target_path_str, '', ''])
 
     with archive.open(str(dist_info_path / 'RECORD'), 'w') as record_file:
       record_file.write(record_output.getvalue().encode())
 
-    archive.printdir()
 
+    print('-- Wheel contents --------')
+    archive.printdir()
+    print('--------------------------')
 
 
   return wheel_file_name

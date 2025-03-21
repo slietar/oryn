@@ -2,12 +2,11 @@ from io import StringIO
 import re
 from dataclasses import dataclass
 from os import PathLike
-from typing import IO
+from typing import IO, Iterable, Reversible, Sequence
 
 
 @dataclass(slots=True)
 class MatchRule:
-  final: bool
   directory: bool
   negated: bool
   pattern: re.Pattern
@@ -64,24 +63,11 @@ class MatchRule:
 
     rule = MatchRule(
       directory=directory,
-      final=False,
       negated=negated,
       pattern=re.compile(pattern + '$', flags=re.IGNORECASE),
     )
 
     return rule
-
-    # if not negated:
-    #   alt_rule = Rule(
-    #     directory=False,
-    #     final=True,
-    #     negated=False,
-    #     pattern=re.compile(pattern + '/'),
-    #   )
-
-    #   return [rule, alt_rule]
-    # else:
-    #   return [rule]
 
 
 def parse_gitignore(file: IO[str]):
@@ -98,19 +84,26 @@ def parse_gitignore(file: IO[str]):
   return rules
 
 
-def match(rules: list[MatchRule], path_like: PathLike | str):
-  path = str(path_like)
-  assert path[0] == '/'
+# None = no rule matched
+def match_rules(path: PathLike | str, rules: Sequence[MatchRule], *, directory: bool = False):
+  assert str(path)[0] == '/'
 
-  for rule in rules:
-    if rule.final and rule.match(path):
-      return True
+  # matched = None
+
+  # for rule in rules:
+  #   # if 'dist' in str(path):
+  #   #   print(path, rule.match(path), rule.pattern.pattern)
+
+  #   if (rule.negated == matched) and rule.match(path) and ((not rule.directory) or directory):
+  #     matched = not rule.negated
+
+  # return matched
 
   for rule in reversed(rules):
-    if (not rule.final) and rule.match(path):
+    if rule.match(path) and ((not rule.directory) or directory):
       return not rule.negated
 
-  return False
+  return None
 
 
 # print(parse_rule('__pycache__'))
