@@ -4,7 +4,6 @@ import shutil
 import tomllib
 from io import StringIO
 from pathlib import Path
-from pprint import pprint
 from zipfile import ZipFile, ZipInfo
 
 from packaging.version import InvalidVersion, Version

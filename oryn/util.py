@@ -1,14 +1,15 @@
+import subprocess
+import tomllib
 from dataclasses import dataclass
 from os import PathLike
-import subprocess
 from pathlib import Path
-import tomllib
 from typing import Any
 
 from .gitignore import MatchRule, match_rules
 
 
 TOOL_NAME = 'oryn'
+
 
 def find_git_ignored_paths(root_path: Path, /):
   # See: https://git-scm.com/docs/git-status#_short_format
@@ -40,17 +41,12 @@ GLOBAL_RULES = [
     '!*/',
     '!*.py',
     '!*.pth',
-    '.git',
-  ]
-]
-
-DEFAULT_RULES = [
-  MatchRule.parse(r) for r in [
-    '__pycache__',
+    '__pycache__/',
     '.DS_Store',
+    '.git/',
     '.gitignore',
-    '.venv',
-    '*.egg-info',
+    '.venv/',
+    '*.egg-info/',
   ]
 ]
 
@@ -66,27 +62,22 @@ class IgnoreRules:
     if explicit_matched is not None:
       return explicit_matched
 
-    gitignored_matched = match_rules(path, self.gitignored, directory=directory)
-
-    if gitignored_matched:
-      return True
-
-    global_matched = match_rules(path, GLOBAL_RULES, directory=directory)
-    return bool(global_matched)
+    return bool(
+      match_rules(path, self.gitignored, directory=directory) or
+      match_rules(path, GLOBAL_RULES, directory=directory)
+    )
 
 
 def get_ignore_rules(root_path: Path, tool_metadata: dict[str, Any]):
   _, tool_metadata = read_metadata(root_path)
 
-  # ignore_rules = GLOBAL_RULES
-
-  if tool_metadata.get('use-git-ignored'):
+  if tool_metadata.get('exclude-git-ignored'):
     gitignored_rules = [MatchRule.parse('/' + p) for p in find_git_ignored_paths(root_path)]
   else:
-    gitignored_rules = DEFAULT_RULES
+    gitignored_rules = []
 
-  if 'ignore' in tool_metadata:
-    explicit_rules = [MatchRule.parse(r) for r in tool_metadata['ignore']]
+  if 'exclude' in tool_metadata:
+    explicit_rules = [MatchRule.parse(r) for r in tool_metadata['exclude']]
   else:
     explicit_rules = []
 

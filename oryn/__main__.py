@@ -49,13 +49,9 @@ def compute_tree(root_path: Path, ignore_rules: IgnoreRules):
     current_ancestor, current_path = current_item
     ancestors.append(current_ancestor)
 
-    # print('Ancestors', [a.value for a in ancestors])
-
     for child_path in sorted((root_path / current_path).iterdir(), key=(lambda path: (path.is_dir(), path.name))):
-      # print('  ->', child_path)
       is_directory = child_path.is_dir()
       relative_path_test = f'/{current_path / child_path.name}'
-      # print('  ->', relative_path_test)
 
       ignored = ignore_rules.match(relative_path_test, directory=is_directory)
 

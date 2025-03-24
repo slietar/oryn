@@ -1,8 +1,7 @@
-from io import StringIO
 import re
 from dataclasses import dataclass
 from os import PathLike
-from typing import IO, Iterable, Reversible, Sequence
+from typing import IO, Sequence
 
 
 @dataclass(slots=True)
@@ -16,24 +15,45 @@ class MatchRule:
 
   @classmethod
   def parse(cls, raw_rule: str):
-    absolute = '/' in raw_rule
-    negated = raw_rule[0] == '!'
+    rule_str = raw_rule
+
+    # TODO: Remove trailing whitespace
+
+    # Check if negated
+
+    negated = rule_str.startswith('!')
 
     if negated:
-      raw_rule = raw_rule[1:]
+      rule_str = rule_str[1:]
 
-    directory = raw_rule.endswith('/')
+    # Check if absolute
 
-    if directory:
-      raw_rule = raw_rule[:-1]
+    if rule_str.startswith('/'):
+      absolute = True
+      rule_str = rule_str[1:]
+    elif rule_str.startswith('\\/'):
+      absolute = True
+      rule_str = rule_str[2:]
+    else:
+      absolute = False
+
+    # Check if directory
+
+    if rule_str.endswith('\\/'):
+      directory = True
+      rule_str = rule_str[:-2]
+    elif rule_str.endswith('/'):
+      directory = True
+      rule_str = rule_str[:-1]
+    else:
+      directory = False
+
+    # Compute pattern
 
     pattern = ''
 
     if absolute:
       pattern += '^/'
-
-      if raw_rule[0] == '/':
-        raw_rule = raw_rule[1:]
     else:
       pattern += '/'
 
@@ -41,14 +61,14 @@ class MatchRule:
     index = 0
     escaped = False
 
-    while index < len(raw_rule):
-      ch = raw_rule[index]
+    while index < len(rule_str):
+      ch = rule_str[index]
 
       match ch:
         case '\\':
           escaped = True
           continue
-        case '*' if (not escaped) and (index + 1 < len(raw_rule)) and (raw_rule[index + 1] == '*'):
+        case '*' if (not escaped) and (index + 1 < len(rule_str)) and (rule_str[index + 1] == '*'):
           pattern += '.+'
           index += 1
         case '*' if (not escaped):

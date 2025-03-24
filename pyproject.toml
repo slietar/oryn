@@ -1,7 +1,11 @@
+[build-system]
+requires = ["flit_core~=3.2"]
+build-backend = "flit_core.buildapi"
+
 [project]
 name = "oryn"
 version = "0.1.0"
-description = "Add your description here"
+description = "A PEP 517-compliant build backend for Python projects"
 readme = "readme.md"
 requires-python = ">=3.13"
 dependencies = [
