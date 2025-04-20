@@ -2,13 +2,17 @@ import csv
 import re
 import shutil
 import tomllib
+from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
+from typing import Optional
 from zipfile import ZipFile, ZipInfo
 
 from packaging.version import InvalidVersion, Version
 
-from .util import IgnoreRules, get_ignore_rules, read_metadata
+from .inclusion import lookup_file_tree
+from .gitignore import MatchRule
+from .util import ToolMetadata, read_metadata
 
 
 # See: https://packaging.python.org/en/latest/specifications/name-normalization/#name-normalization
@@ -19,26 +23,17 @@ def normalize_name(name: str, /):
   return re.sub(r'[-_.]+', '-', name).lower()
 
 
-def find_targets(root_path: Path, ignore_rules: IgnoreRules):
-  queue = [Path('.')]
+@dataclass(slots=True)
+class Ancestor:
+  ignore_rules: list[MatchRule]
+  included: bool
+  part: str
 
-  while queue:
-    current_relative_path = queue.pop()
-    current_path = root_path / current_relative_path
-
-    for child_path in sorted(current_path.iterdir(), key=(lambda path: path.name)):
-      is_directory = child_path.is_dir()
-
-      child_relative_path = current_relative_path / child_path.name
-      relative_path_test = f'/{child_relative_path}'
-
-      ignored = ignore_rules.match(relative_path_test, directory=is_directory)
-
-      if not ignored:
-        if is_directory:
-          queue.append(child_relative_path)
-        elif child_path.is_file():
-          yield child_relative_path
+def find_targets(root_path: Path, tool_metadata: ToolMetadata):
+  for item in lookup_file_tree(root_path, tool_metadata):
+    if (item is not None) and (item.include_rel in ('descendant', 'target')) and (not item.ignored) and (not item.is_directory):
+      # print('>', item.path)
+      yield item.path
 
 
 def build_wheel(wheel_directory: str, config_settings = None, metadata_directory = None):
@@ -77,8 +72,6 @@ def build_wheel(wheel_directory: str, config_settings = None, metadata_directory
   metadata, tool_metadata = read_metadata(root_path)
   project_metadata = metadata.get('project', {})
 
-  ignore_rules = get_ignore_rules(root_path, tool_metadata)
-
 
   # Write wheel
 
@@ -103,7 +96,7 @@ def build_wheel(wheel_directory: str, config_settings = None, metadata_directory
 
     # Copy targets
 
-    for target_path in find_targets(root_path, ignore_rules):
+    for target_path in find_targets(root_path, tool_metadata):
       target_path_str = str(target_path)
       target_info = ZipInfo(target_path_str)
 

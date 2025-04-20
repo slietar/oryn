@@ -3,6 +3,8 @@ from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from .inclusion import lookup_file_tree
+
 from .gitignore import MatchRule, match_rules, parse_gitignore
 from .util import ToolMetadata, read_metadata
 
@@ -13,11 +15,11 @@ ENABLE_COLOR = 'NO_COLOR' not in os.environ
 class HierarchyNode:
   value: str
   _: KW_ONLY
-  included: bool
   children: 'list[HierarchyNode]' = field(default_factory=list)
+  is_target: bool
 
   def format(self, *, prefix: str = str()):
-    if not self.included:
+    if not self.is_target:
       if ENABLE_COLOR:
         value_prefix = '\033[90m'
         value_suffix = '\033[0m'
@@ -36,94 +38,26 @@ class HierarchyNode:
     ])
 
 
-@dataclass(kw_only=True, slots=True)
-class Ancestor:
-  ignore_rules: list[MatchRule]
-  included: bool
-  node: HierarchyNode
-  part: str
-
-
 def compute_tree(root_path: Path, tool_metadata: ToolMetadata):
-  global_ignore_rules = [MatchRule.parse(r) for r in tool_metadata.get('ignore', [])]
-  include_rules = [MatchRule.parse(r, allow_negated=False, enforce_absolute=True) for r in tool_metadata.get('include', [])]
+  node_ancestors = list[HierarchyNode]()
 
-  queue: list[Optional[Path]] = [Path('.')]
-  ancestors = list[Ancestor]()
-
-  while queue:
-    relative_path = queue.pop()
-
-    if relative_path is None:
-      if len(ancestors) > 1:
-        ancestors.pop()
-
-      continue
-
-    path = root_path / relative_path
-
-    if path.is_dir():
-      kind = 'directory'
-    elif path.is_file():
-      kind = 'file'
+  for item in lookup_file_tree(root_path, tool_metadata):
+    if item is None:
+      if len(node_ancestors) > 1:
+        node_ancestors.pop()
     else:
-      kind = None
-
-
-    path_test = f'/{relative_path}'
-    parts = [*(ancestor.part for ancestor in ancestors), relative_path.name]
-
-    if not ancestors:
-      include_rel = 'ancestor'
-    elif ancestors[-1].included:
-      include_rel = 'descendant'
-    else:
-      include_rel = match_rules(path_test, include_rules, directory=(kind == 'directory'))
-
-    if include_rel in ('descendant', 'target'):
-      ignored = match_rules(path_test, global_ignore_rules) == 'target'
-
-      if not ignored:
-        for ancestor_index, ancestor in enumerate(ancestors, start=1):
-          if match_rules('/' + '/'.join(parts[ancestor_index:]), ancestor.ignore_rules) == 'target':
-            ignored = True
-            break
-    else:
-      ignored = False
-
-
-    node = HierarchyNode(
-      (relative_path.name or '.') + ('/' if kind == 'directory' else '') + (' [inclusion root]' if include_rel == 'target' else ''),
-      included=(include_rel in ('descendant', 'target') and (not ignored)),
-    )
-
-    if ancestors:
-      ancestors[-1].node.children.append(node)
-
-    if (kind == 'directory') and (include_rel is not None) and (not ignored):
-      gitignore_path = path / '.gitignore'
-
-      if gitignore_path.exists():
-        with gitignore_path.open('r', encoding='utf-8') as file:
-          ignore_rules = parse_gitignore(file)
-      else:
-        ignore_rules = []
-
-      ancestors.append(
-        Ancestor(
-          ignore_rules=ignore_rules,
-          included=(include_rel in ('descendant', 'target')),
-          node=node,
-          part=relative_path.name,
-        )
+      node = HierarchyNode(
+        is_target=(item.include_rel in ('descendant', 'target') and (not item.ignored)),
+        value=(item.path.name or '.') + ('/' if item.is_directory else '') + (' [inclusion root]' if item.include_rel == 'target' else ''),
       )
 
-      queue.append(None)
+      if node_ancestors:
+        node_ancestors[-1].children.append(node)
 
-      for child_path in reversed(sorted(path.iterdir(), key=(lambda child_path: (child_path.is_dir(), child_path.name)))):
-        queue.append(relative_path / child_path.name)
+      if item.has_children:
+        node_ancestors.append(node)
 
-  return ancestors[0].node
+  return node_ancestors[0]
 
 
 if __name__ == '__main__':
