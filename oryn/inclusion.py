@@ -95,11 +95,14 @@ def lookup_file_tree(root_path: Path, tool_metadata: ToolMetadata):
     )
 
     if has_children:
-      gitignore_path = path / '.gitignore'
+      if tool_metadata.get('use-gitignore'):
+        gitignore_path = path / '.gitignore'
 
-      if gitignore_path.exists():
-        with gitignore_path.open() as file:
-          ignore_rules = parse_gitignore(file)
+        if gitignore_path.exists():
+          with gitignore_path.open() as file:
+            ignore_rules = parse_gitignore(file)
+        else:
+          ignore_rules = []
       else:
         ignore_rules = []
 

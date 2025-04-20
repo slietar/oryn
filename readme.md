@@ -13,31 +13,31 @@ Add the following to your `pyproject.toml`:
 
 ```toml
 [build-system]
-requires = ["oryn"]
+requires = ["oryn~=1.0"]
 build-backend = "oryn"
 
 [tool.oryn]
-exclude-git-ignored = true
-exclude = [
-  # Any patterns here will be excluded from the wheel
-  "/dist/",
+# src layout
+include = ["/src/foo/"]
+include = ["/src/*/"]
+
+# flat layout
+include = ["/foo/"]
+
+ignore = [
+  "*.pyc",
 ]
+
+use-gitignore = true
 ```
 
+The following files are ignored by default:
 
-## Excluding files
-
-Oryn will exclude the following files and directories from the wheel, with the last taking precedence over the first:
-
-1. Predetermined exclusions.
-  - files (not directories) that are immediately in the project root, except for those with `.py` or `.pth` extensions
-  - `__pycache__/`
-  - `.DS_Store`
-  - `.git/`
-  - `.gitignore`
-  - `.venv/`
-  - `*.egg-info/`
-2. If the option `tool.oryn.exclude-git-ignored` in `pyproject.toml` is set to `true` (it defaults to `false`), files ignored by Git. Note that this is distinct from files in `.gitignore`, requires a Git directory to be present in the project root directory or one of its ancestors, and the `git` command to be available.
-3. Files and directories that correspond to patterns in the `tool.oryn.exclude` option, using [the same pattern format as `.gitignore` files](https://git-scm.com/docs/gitignore#_pattern_format) except for character ranges such as `[a-z]`.
+- `__pycache__/`
+- `.DS_Store`
+- `.git/`
+- `.gitignore`
+- `.venv/`
+- `*.egg-info/`
 
 To show which files will be included, install Oryn and run `python -m oryn`.
