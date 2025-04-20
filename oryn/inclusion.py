@@ -1,33 +1,29 @@
 from dataclasses import dataclass
-from io import StringIO
 from pathlib import Path
-from pprint import pprint
 from typing import Literal, Optional
-from zipfile import ZipFile, ZipInfo
-
-from packaging.version import InvalidVersion, Version
 
 from .gitignore import MatchRule, match_rules, parse_gitignore
-from .util import ToolMetadata, read_metadata
+from .util import GLOBAL_RULES, ToolMetadata
 
 
 @dataclass(slots=True)
 class Ancestor:
   ignore_rules: list[MatchRule]
-  included: bool
+  inclusion_root_path: Optional[Path]
   part: str
 
 @dataclass(kw_only=True, slots=True)
 class Item:
   has_children: bool
   ignored: bool
-  include_rel: Literal['ancestor', 'descendant', 'target', None]
+  inclusion_relation: Literal['ancestor', 'descendant', 'target', None]
+  inclusion_relative_path: Optional[Path]
   is_directory: bool
   path: Path
 
 
 def lookup_file_tree(root_path: Path, tool_metadata: ToolMetadata):
-  global_ignore_rules = [MatchRule.parse(r) for r in tool_metadata.get('ignore', [])]
+  global_ignore_rules = GLOBAL_RULES + [MatchRule.parse(r) for r in tool_metadata.get('ignore', [])]
   include_rules = [MatchRule.parse(r, allow_negated=False, enforce_absolute=True) for r in tool_metadata.get('include', [])]
 
   ancestors = list[Ancestor]()
@@ -55,13 +51,16 @@ def lookup_file_tree(root_path: Path, tool_metadata: ToolMetadata):
     parts = [*(ancestor.part for ancestor in ancestors), relative_path.name]
 
     if not ancestors:
-      include_rel = 'ancestor'
-    elif ancestors[-1].included:
-      include_rel = 'descendant'
+      inclusion_relation = 'ancestor'
+      inclusion_root_path = None
+    elif ancestors[-1].inclusion_root_path is not None:
+      inclusion_relation = 'descendant'
+      inclusion_root_path = ancestors[-1].inclusion_root_path
     else:
-      include_rel = match_rules(path_test, include_rules, directory=is_directory)
+      inclusion_relation = match_rules(path_test, include_rules, directory=is_directory)
+      inclusion_root_path = path if inclusion_relation in ('descendant', 'target') else None
 
-    if include_rel in ('descendant', 'target'):
+    if inclusion_relation in ('descendant', 'target'):
       ignored = match_rules(path_test, global_ignore_rules) == 'target'
 
       if not ignored:
@@ -72,12 +71,13 @@ def lookup_file_tree(root_path: Path, tool_metadata: ToolMetadata):
     else:
       ignored = False
 
-    has_children = is_directory and (include_rel is not None) and (not ignored)
+    has_children = is_directory and (inclusion_relation is not None) and (not ignored)
 
     yield Item(
       has_children=has_children,
       ignored=ignored,
-      include_rel=include_rel,
+      inclusion_relation=inclusion_relation,
+      inclusion_relative_path=(path.relative_to(inclusion_root_path.parent) if inclusion_root_path is not None else None),
       is_directory=is_directory,
       path=path,
     )
@@ -94,7 +94,7 @@ def lookup_file_tree(root_path: Path, tool_metadata: ToolMetadata):
       ancestors.append(
         Ancestor(
           ignore_rules=ignore_rules,
-          included=(include_rel in ('descendant', 'target')),
+          inclusion_root_path=inclusion_root_path,
           part=relative_path.name,
         ),
       )

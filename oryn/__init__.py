@@ -31,9 +31,8 @@ class Ancestor:
 
 def find_targets(root_path: Path, tool_metadata: ToolMetadata):
   for item in lookup_file_tree(root_path, tool_metadata):
-    if (item is not None) and (item.include_rel in ('descendant', 'target')) and (not item.ignored) and (not item.is_directory):
-      # print('>', item.path)
-      yield item.path
+    if (item is not None) and (item.inclusion_relation in ('descendant', 'target')) and (not item.ignored) and (not item.is_directory):
+      yield item.path, item.inclusion_relative_path
 
 
 def build_wheel(wheel_directory: str, config_settings = None, metadata_directory = None):
@@ -96,11 +95,11 @@ def build_wheel(wheel_directory: str, config_settings = None, metadata_directory
 
     # Copy targets
 
-    for target_path in find_targets(root_path, tool_metadata):
-      target_path_str = str(target_path)
+    for target_path_in_fs, target_path_in_archive in find_targets(root_path, tool_metadata):
+      target_path_str = str(target_path_in_archive)
       target_info = ZipInfo(target_path_str)
 
-      source_path = root_path / target_path
+      source_path = root_path / target_path_in_fs
 
       # Using this instead of archive.write() to erase timestamp
       with (

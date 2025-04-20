@@ -47,8 +47,8 @@ def compute_tree(root_path: Path, tool_metadata: ToolMetadata):
         node_ancestors.pop()
     else:
       node = HierarchyNode(
-        is_target=(item.include_rel in ('descendant', 'target') and (not item.ignored)),
-        value=(item.path.name or '.') + ('/' if item.is_directory else '') + (' [inclusion root]' if item.include_rel == 'target' else ''),
+        is_target=(item.inclusion_relation in ('descendant', 'target') and (not item.ignored)),
+        value=(item.path.name or '.') + ('/' if item.is_directory else '') + (' [inclusion root]' if item.inclusion_relation == 'target' else ''),
       )
 
       if node_ancestors:
