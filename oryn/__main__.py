@@ -1,12 +1,9 @@
 import os
 from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
-from typing import Optional
 
 from .inclusion import lookup_file_tree
-
-from .gitignore import MatchRule, match_rules, parse_gitignore
-from .util import ToolMetadata, read_metadata
+from .metadata import ToolMetadata, read_metadata
 
 
 ENABLE_COLOR = 'NO_COLOR' not in os.environ

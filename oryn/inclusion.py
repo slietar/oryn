@@ -2,8 +2,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Optional
 
-from .gitignore import MatchRule, match_rules, parse_gitignore
-from .util import GLOBAL_RULES, ToolMetadata
+from .matching import MatchRule, match_rules, parse_gitignore
+from .metadata import ToolMetadata
+
+
+DEFAULT_IGNORE_RULES = [
+  MatchRule.parse(r) for r in [
+    '__pycache__/',
+    '.DS_Store',
+    '.git/',
+    '.gitignore',
+    '.venv/',
+    '*.egg-info/',
+  ]
+]
 
 
 @dataclass(slots=True)
@@ -23,7 +35,7 @@ class Item:
 
 
 def lookup_file_tree(root_path: Path, tool_metadata: ToolMetadata):
-  global_ignore_rules = GLOBAL_RULES + [MatchRule.parse(r) for r in tool_metadata.get('ignore', [])]
+  global_ignore_rules = DEFAULT_IGNORE_RULES + [MatchRule.parse(r) for r in tool_metadata.get('ignore', [])]
   include_rules = [MatchRule.parse(r, allow_negated=False, enforce_absolute=True) for r in tool_metadata.get('include', [])]
 
   ancestors = list[Ancestor]()
