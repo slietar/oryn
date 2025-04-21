@@ -65,13 +65,14 @@ def build_wheel(wheel_directory: str, config_settings = None, metadata_directory
 
   # Write wheel
 
-  wheel_file_name = f'{name}-{version}-py3-none-any.whl'
+  renormalized_name = name.replace('-', '_')
+  wheel_file_name = f'{renormalized_name}-{version}-py3-none-any.whl'
 
   with ZipFile(Path(wheel_directory) / wheel_file_name, 'w') as archive:
     # Initialize
 
     # See: https://packaging.python.org/en/latest/specifications/recording-installed-packages/
-    dist_info_path = Path(f'{name}-{version}.dist-info')
+    dist_info_path = Path(f'{renormalized_name}-{version}.dist-info')
 
     record_output = StringIO()
     record_writer = csv.writer(record_output, delimiter=',', lineterminator='\n')
