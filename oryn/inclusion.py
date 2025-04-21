@@ -73,11 +73,11 @@ def lookup_file_tree(root_path: Path, tool_metadata: ToolMetadata):
       inclusion_root_path = path if inclusion_relation in ('descendant', 'target') else None
 
     if inclusion_relation in ('descendant', 'target'):
-      ignored = match_rules(path_test, global_ignore_rules) == 'target'
+      ignored = match_rules(path_test, global_ignore_rules, directory=is_directory) == 'target'
 
       if not ignored:
         for ancestor_index, ancestor in enumerate(ancestors, start=1):
-          if match_rules('/' + '/'.join(parts[ancestor_index:]), ancestor.ignore_rules) == 'target':
+          if match_rules('/' + '/'.join(parts[ancestor_index:]), ancestor.ignore_rules, directory=is_directory) == 'target':
             ignored = True
             break
     else:

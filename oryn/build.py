@@ -1,16 +1,15 @@
 import csv
 import re
 import shutil
-from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
 from zipfile import ZipFile, ZipInfo
 
+from editables import EditableProject
 from packaging.version import InvalidVersion, Version
 
 from .inclusion import lookup_file_tree
-from .matching import MatchRule
-from .metadata import ToolMetadata, read_metadata
+from .metadata import read_metadata
 
 
 # See: https://packaging.python.org/en/latest/specifications/name-normalization/#name-normalization
@@ -19,18 +18,6 @@ def is_name_valid(unnormalized_name: str, /):
 
 def normalize_name(name: str, /):
   return re.sub(r'[-_.]+', '-', name).lower()
-
-
-@dataclass(slots=True)
-class Ancestor:
-  ignore_rules: list[MatchRule]
-  included: bool
-  part: str
-
-def find_targets(root_path: Path, tool_metadata: ToolMetadata):
-  for item in lookup_file_tree(root_path, tool_metadata):
-    if (item is not None) and (item.inclusion_relation in ('descendant', 'target')) and (not item.ignored) and (not item.is_directory):
-      yield item.path, item.inclusion_relative_path
 
 
 def write_wheel(wheel_directory: str, /, *, editable: bool = False):
@@ -86,29 +73,38 @@ def write_wheel(wheel_directory: str, /, *, editable: bool = False):
     # Copy targets
 
     if editable:
-      pth_path_str = f'{snake_name}.pth'
+      editable_project = EditableProject(name, root_path)
 
-      with archive.open(pth_path_str, 'w') as pth_file:
-        for item in lookup_file_tree(root_path, tool_metadata):
-          if (item is not None) and (item.inclusion_relation == 'target') and (not item.ignored):
-            pth_file.write(str(item.path).encode() + b'\n')
+      for item in lookup_file_tree(root_path, tool_metadata):
+        if (item is not None) and (item.inclusion_relation == 'target') and (not item.ignored):
+          editable_project.map(
+            item.path.stem,
+            item.path.relative_to(root_path),
+          )
 
-      record_writer.writerow([pth_path_str, '', ''])
+      for file_path_str, file_contents in editable_project.files():
+        with archive.open(file_path_str, 'w') as file:
+          file.write(file_contents.encode())
+
+        record_writer.writerow([file_path_str, '', ''])
+
+      supp_dependencies = list(editable_project.dependencies())
     else:
-      for target_path_in_fs, target_path_in_archive in find_targets(root_path, tool_metadata):
-        target_path_str = str(target_path_in_archive)
-        target_info = ZipInfo(target_path_str)
+      for item in lookup_file_tree(root_path, tool_metadata):
+        if (item is not None) and (item.inclusion_relative_path is not None) and (not item.ignored) and (not item.is_directory):
+          target_path_str = str(item.inclusion_relative_path)
+          target_info = ZipInfo(target_path_str)
 
-        source_path = root_path / target_path_in_fs
+          # Using this instead of archive.write() to erase timestamp
+          with (
+            item.path.open('rb') as source_file,
+            archive.open(target_info, 'w') as target_file
+          ):
+            shutil.copyfileobj(source_file, target_file, 1024 * 8)
 
-        # Using this instead of archive.write() to erase timestamp
-        with (
-          source_path.open('rb') as source_file,
-          archive.open(target_info, 'w') as target_file
-        ):
-          shutil.copyfileobj(source_file, target_file, 1024 * 8)
+          record_writer.writerow([target_path_str, '', ''])
 
-        record_writer.writerow([target_path_str, '', ''])
+      supp_dependencies = []
 
     # Write metadata, record and wheel files
 
@@ -124,6 +120,9 @@ def write_wheel(wheel_directory: str, /, *, editable: bool = False):
       if 'dependencies' in project_metadata:
         for dependency in project_metadata['dependencies']:
           metadata_file.write(f'Requires-Dist: {dependency}\n'.encode())
+
+      for dependency in supp_dependencies:
+        metadata_file.write(f'Requires-Dist: {dependency}\n'.encode())
 
       if 'readme' in project_metadata:
         if isinstance(project_metadata['readme'], str):

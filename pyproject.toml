@@ -9,5 +9,6 @@ description = "A PEP 517-compliant build backend for Python projects"
 readme = "readme.md"
 requires-python = ">=3.13"
 dependencies = [
+  "editables>=0.5",
   "packaging>=24.2",
 ]
