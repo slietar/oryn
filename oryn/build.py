@@ -1,7 +1,6 @@
 import csv
 import re
 import shutil
-import tomllib
 from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
@@ -34,7 +33,7 @@ def find_targets(root_path: Path, tool_metadata: ToolMetadata):
       yield item.path, item.inclusion_relative_path
 
 
-def build_wheel(wheel_directory: str, config_settings = None, metadata_directory = None):
+def write_wheel(wheel_directory: str, /, *, editable: bool = False):
   # Load metadata
 
   root_path = Path.cwd()
@@ -65,14 +64,14 @@ def build_wheel(wheel_directory: str, config_settings = None, metadata_directory
 
   # Write wheel
 
-  renormalized_name = name.replace('-', '_')
-  wheel_file_name = f'{renormalized_name}-{version}-py3-none-any.whl'
+  snake_name = name.replace('-', '_')
+  wheel_file_name = f'{snake_name}-{version}-py3-none-any.whl'
 
   with ZipFile(Path(wheel_directory) / wheel_file_name, 'w') as archive:
     # Initialize
 
     # See: https://packaging.python.org/en/latest/specifications/recording-installed-packages/
-    dist_info_path = Path(f'{renormalized_name}-{version}.dist-info')
+    dist_info_path = Path(f'{snake_name}-{version}.dist-info')
 
     record_output = StringIO()
     record_writer = csv.writer(record_output, delimiter=',', lineterminator='\n')
@@ -86,20 +85,30 @@ def build_wheel(wheel_directory: str, config_settings = None, metadata_directory
 
     # Copy targets
 
-    for target_path_in_fs, target_path_in_archive in find_targets(root_path, tool_metadata):
-      target_path_str = str(target_path_in_archive)
-      target_info = ZipInfo(target_path_str)
+    if editable:
+      pth_path_str = f'{snake_name}.pth'
 
-      source_path = root_path / target_path_in_fs
+      with archive.open(pth_path_str, 'w') as pth_file:
+        for item in lookup_file_tree(root_path, tool_metadata):
+          if (item is not None) and (item.inclusion_relation == 'target') and (not item.ignored):
+            pth_file.write(str(item.path).encode() + b'\n')
 
-      # Using this instead of archive.write() to erase timestamp
-      with (
-        source_path.open('rb') as source_file,
-        archive.open(target_info, 'w') as target_file
-      ):
-        shutil.copyfileobj(source_file, target_file, 1024 * 8)
+      record_writer.writerow([pth_path_str, '', ''])
+    else:
+      for target_path_in_fs, target_path_in_archive in find_targets(root_path, tool_metadata):
+        target_path_str = str(target_path_in_archive)
+        target_info = ZipInfo(target_path_str)
 
-      record_writer.writerow([target_path_str, '', ''])
+        source_path = root_path / target_path_in_fs
+
+        # Using this instead of archive.write() to erase timestamp
+        with (
+          source_path.open('rb') as source_file,
+          archive.open(target_info, 'w') as target_file
+        ):
+          shutil.copyfileobj(source_file, target_file, 1024 * 8)
+
+        record_writer.writerow([target_path_str, '', ''])
 
     # Write metadata, record and wheel files
 
@@ -159,11 +168,20 @@ def build_wheel(wheel_directory: str, config_settings = None, metadata_directory
   return wheel_file_name
 
 
-def build_sdist(sdist_directory, config_settings=None):
+def build_wheel(wheel_directory: str, config_settings = None, metadata_directory = None):
+  return write_wheel(wheel_directory, editable=False)
+
+
+def build_sdist(sdist_directory, config_settings = None):
   raise NotImplementedError('Sdist building is not implemented yet')
 
 
+def build_editable(wheel_directory: str, config_settings = None, metadata_directory = None):
+  return write_wheel(wheel_directory, editable=True)
+
+
 __all__ = [
+  'build_editable',
   'build_sdist',
   'build_wheel',
 ]
