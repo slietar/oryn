@@ -6,6 +6,7 @@ from pathlib import Path
 from zipfile import ZipFile, ZipInfo
 
 from editables import EditableProject
+from packaging.licenses import canonicalize_license_expression
 from packaging.version import InvalidVersion, Version
 
 from .inclusion import lookup_file_tree
@@ -18,6 +19,26 @@ def is_name_valid(unnormalized_name: str, /):
 
 def normalize_name(name: str, /):
   return re.sub(r'[-_.]+', '-', name).lower()
+
+def process_person_list(person_list: list[str | dict], /):
+  names = list[str]()
+  emails = list[str]()
+
+  for person in person_list:
+    if isinstance(person, str):
+      names.append(person)
+    elif isinstance(person, dict):
+      name = person.get('name', '')
+      email = person.get('email', '')
+
+      if email and name:
+        emails.append(f'{name} <{email}>')
+      elif email:
+        emails.append(email)
+      elif name:
+        names.append(name)
+
+  return names, emails
 
 
 def write_wheel(wheel_directory: str, /, *, editable: bool = False):
@@ -109,20 +130,75 @@ def write_wheel(wheel_directory: str, /, *, editable: bool = False):
     # Write metadata, record and wheel files
 
     with archive.open(str(dist_info_path / 'METADATA'), 'w') as metadata_file:
-      metadata_file.write(f'Metadata-Version: 1.0\nName: {name}\nVersion: {version}\n'.encode())
+      # Metadata version
+
+      metadata_file.write(f'Metadata-Version: 2.4\n'.encode())
+
+      # Name and version
+
+      metadata_file.write(f'Name: {name}\n'.encode())
+      metadata_file.write(f'Version: {version}\n'.encode())
+
+      # Python version
 
       if 'requires-python' in project_metadata:
         metadata_file.write(f'Requires-Python: {project_metadata['requires-python']}\n'.encode())
 
+      # Description
+
       if 'description' in project_metadata:
         metadata_file.write(f'Summary: {project_metadata['description']}\n'.encode())
 
-      if 'dependencies' in project_metadata:
-        for dependency in project_metadata['dependencies']:
-          metadata_file.write(f'Requires-Dist: {dependency}\n'.encode())
+      # Dependencies
 
-      for dependency in supp_dependencies:
+      for dependency in project_metadata.get('dependencies', []) + supp_dependencies:
         metadata_file.write(f'Requires-Dist: {dependency}\n'.encode())
+
+      # Authors
+
+      if 'authors' in project_metadata:
+        names, emails = process_person_list(project_metadata['authors'])
+
+        if names:
+          metadata_file.write(f'Author: {', '.join(names)}\n'.encode())
+
+        if emails:
+          metadata_file.write(f'Author-Email: {', '.join(emails)}\n'.encode())
+
+      # Maintainers
+
+      if 'maintainers' in project_metadata:
+        names, emails = process_person_list(project_metadata['maintainers'])
+
+        if names:
+          metadata_file.write(f'Maintainer: {', '.join(names)}\n'.encode())
+
+        if emails:
+          metadata_file.write(f'Maintainer-Email: {', '.join(emails)}\n'.encode())
+
+      # License
+
+      if 'license' in project_metadata:
+        metadata_file.write(f'License-Expression: {canonicalize_license_expression(project_metadata['license'])}\n'.encode())
+
+      # Classifiers
+
+      for classifier in project_metadata.get('classifiers', []):
+          metadata_file.write(f'Classifier: {classifier}\n'.encode())
+
+      # Keywords
+
+      keywords = project_metadata.get('keywords', [])
+
+      if keywords:
+        metadata_file.write(f'Keywords: {','.join(keywords)}\n'.encode())
+
+      # URLs
+
+      for label, url in project_metadata.get('urls', {}).items():
+        metadata_file.write(f'Project-URL: {label}, {url}\n'.encode())
+
+      # Readme
 
       if 'readme' in project_metadata:
         if isinstance(project_metadata['readme'], str):
@@ -145,6 +221,8 @@ def write_wheel(wheel_directory: str, /, *, editable: bool = False):
               readme_type = 'text/plain'
 
         metadata_file.write(f'Description-Content-Type: {readme_type}\n\n'.encode())
+
+        # Write metadata file
 
         with readme_path.open('rb') as readme_file:
           shutil.copyfileobj(readme_file, metadata_file)
