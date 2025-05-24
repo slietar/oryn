@@ -17,17 +17,23 @@ requires = ["oryn~=1.0"]
 build-backend = "oryn"
 
 [tool.oryn]
-# src layout
-include = ["/src/foo/"]
-include = ["/src/*/"]
+# 1. Add inclusion roots
+# Only the last part of the path is retained in the wheel. Paths are relative
+# to the project root despite the absence of a leading slash.
 
-# flat layout
-include = ["/foo/"]
+# For a src layout
+include = ["src/foo/"]
+include = ["src/*/"]
 
+# For a flat layout
+include = ["foo/"]
+
+# 2. Add ignored files, using patterns similar to .gitignore.
 ignore = [
   "*.pyc",
 ]
 
+# 3. Optionally reuse existing .gitignore rules.
 use-gitignore = true
 ```
 
