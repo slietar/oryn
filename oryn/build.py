@@ -227,8 +227,8 @@ def write_wheel(wheel_directory: str, /, *, editable: bool = False):
         with readme_path.open('rb') as readme_file:
           shutil.copyfileobj(readme_file, metadata_file)
 
-    with archive.open(str(dist_info_path / 'METADATA'), 'r') as metadata_file:
-      print(metadata_file.read().decode())
+    # with archive.open(str(dist_info_path / 'METADATA'), 'r') as metadata_file:
+    #   print(metadata_file.read().decode())
 
     with archive.open(str(dist_info_path / 'RECORD'), 'w') as record_file:
       record_file.write(record_output.getvalue().encode())

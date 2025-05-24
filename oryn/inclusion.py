@@ -36,7 +36,7 @@ class Item:
 
 def lookup_file_tree(root_path: Path, tool_metadata: ToolMetadata):
   global_ignore_rules = DEFAULT_IGNORE_RULES + [MatchRule.parse(r) for r in tool_metadata.get('ignore', [])]
-  include_rules = [MatchRule.parse(r, allow_negated=False, enforce_absolute=True) for r in tool_metadata.get('include', [])]
+  include_rules = [MatchRule.parse(r, allow_negated=False, ensure_absolute=True) for r in tool_metadata.get('include', [])]
 
   ancestors = list[Ancestor]()
   queue: list[Optional[Path]] = [Path('.')]

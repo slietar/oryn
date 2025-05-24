@@ -26,7 +26,7 @@ class MatchRule:
     return False
 
   @classmethod
-  def parse(cls, raw_rule: str, *, allow_negated: bool = True, enforce_absolute: bool = False):
+  def parse(cls, raw_rule: str, *, allow_negated: bool = True, ensure_absolute: bool = False):
     rule_str = raw_rule
 
     # TODO: Remove trailing whitespace
@@ -47,7 +47,7 @@ class MatchRule:
       absolute = True
       rule_str = rule_str[2:]
     else:
-      absolute = enforce_absolute
+      absolute = ensure_absolute
 
     # Check if directory
 
