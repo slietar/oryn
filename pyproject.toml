@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "oryn"
-version = "1.0"
+version = "1.1"
 description = "A PEP 517-compliant build backend for Python projects"
 license = "EUPL-1.2"
 readme = "readme.md"
