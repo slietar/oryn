@@ -4,7 +4,7 @@ Oryn is a PEP 517-compliant build backend for Python projects.
 
 For now, Oryn only supports pure Python wheels and just recursively copies files from the project root into the wheel, making sure to ignore certain files. It also copies the appropriate metadata from `pyproject.toml` into the wheel's metadata.
 
-Oryn supports Python 3.13 and later.
+Oryn supports Python 3.10 and later.
 
 
 ## Usage

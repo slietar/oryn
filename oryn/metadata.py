@@ -1,12 +1,17 @@
-import tomllib
+import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias
+
+if sys.version_info >= (3, 11):
+  import tomllib
+else:
+  import tomli as tomllib
 
 
 TOOL_NAME = 'oryn'
 
 
-type ToolMetadata = dict[str, Any]
+ToolMetadata: TypeAlias = dict[str, Any]
 
 def read_metadata(root_path: Path):
   with (root_path / 'pyproject.toml').open('rb') as metadata_file:

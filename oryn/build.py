@@ -142,12 +142,12 @@ def write_wheel(wheel_directory: str, /, *, editable: bool = False):
       # Python version
 
       if 'requires-python' in project_metadata:
-        metadata_file.write(f'Requires-Python: {project_metadata['requires-python']}\n'.encode())
+        metadata_file.write(f'Requires-Python: {project_metadata["requires-python"]}\n'.encode())
 
       # Description
 
       if 'description' in project_metadata:
-        metadata_file.write(f'Summary: {project_metadata['description']}\n'.encode())
+        metadata_file.write(f'Summary: {project_metadata["description"]}\n'.encode())
 
       # Dependencies
 
@@ -160,10 +160,10 @@ def write_wheel(wheel_directory: str, /, *, editable: bool = False):
         names, emails = process_person_list(project_metadata['authors'])
 
         if names:
-          metadata_file.write(f'Author: {', '.join(names)}\n'.encode())
+          metadata_file.write(f'Author: {", ".join(names)}\n'.encode())
 
         if emails:
-          metadata_file.write(f'Author-Email: {', '.join(emails)}\n'.encode())
+          metadata_file.write(f'Author-Email: {", ".join(emails)}\n'.encode())
 
       # Maintainers
 
@@ -171,15 +171,15 @@ def write_wheel(wheel_directory: str, /, *, editable: bool = False):
         names, emails = process_person_list(project_metadata['maintainers'])
 
         if names:
-          metadata_file.write(f'Maintainer: {', '.join(names)}\n'.encode())
+          metadata_file.write(f'Maintainer: {", ".join(names)}\n'.encode())
 
         if emails:
-          metadata_file.write(f'Maintainer-Email: {', '.join(emails)}\n'.encode())
+          metadata_file.write(f'Maintainer-Email: {", ".join(emails)}\n'.encode())
 
       # License
 
       if 'license' in project_metadata:
-        metadata_file.write(f'License-Expression: {canonicalize_license_expression(project_metadata['license'])}\n'.encode())
+        metadata_file.write(f'License-Expression: {canonicalize_license_expression(project_metadata["license"])}\n'.encode())
 
       # Classifiers
 
@@ -191,7 +191,7 @@ def write_wheel(wheel_directory: str, /, *, editable: bool = False):
       keywords = project_metadata.get('keywords', [])
 
       if keywords:
-        metadata_file.write(f'Keywords: {','.join(keywords)}\n'.encode())
+        metadata_file.write(f'Keywords: {",".join(keywords)}\n'.encode())
 
       # URLs
 
