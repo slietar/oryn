@@ -10,7 +10,6 @@ license = "EUPL-1.2"
 readme = "readme.md"
 requires-python = "~=3.10"
 dependencies = [
-  "editables==0.5",
   "packaging==25.0",
   "tomli~=2.2.1; python_version == '3.10'"
 ]

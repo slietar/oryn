@@ -5,7 +5,6 @@ from io import StringIO
 from pathlib import Path
 from zipfile import ZipFile, ZipInfo
 
-from editables import EditableProject
 from packaging.licenses import canonicalize_license_expression
 from packaging.version import InvalidVersion, Version
 
@@ -94,22 +93,17 @@ def write_wheel(wheel_directory: str, /, *, editable: bool = False):
     # Copy targets
 
     if editable:
-      editable_project = EditableProject(name, root_path)
+      target_parent_paths = set[Path]()
 
       for item in lookup_file_tree(root_path, tool_metadata):
         if (item is not None) and (item.inclusion_relation == 'target') and (not item.ignored):
-          editable_project.map(
-            item.path.stem,
-            item.path.relative_to(root_path),
-          )
+          assert item.inclusion_relative_path is not None
+          target_parent_paths.add(item.path.parent)
 
-      for file_path_str, file_contents in editable_project.files():
-        with archive.open(file_path_str, 'w') as file:
-          file.write(file_contents.encode())
+      with archive.open(f'_{snake_name}.pth', 'w') as file:
+        for path in target_parent_paths:
+          file.write(f'{path.as_posix()}\n'.encode())
 
-        record_writer.writerow([file_path_str, '', ''])
-
-      supp_dependencies = list(editable_project.dependencies())
     else:
       for item in lookup_file_tree(root_path, tool_metadata):
         if (item is not None) and (item.inclusion_relative_path is not None) and (not item.ignored) and (not item.is_directory):
@@ -125,14 +119,12 @@ def write_wheel(wheel_directory: str, /, *, editable: bool = False):
 
           record_writer.writerow([target_path_str, '', ''])
 
-      supp_dependencies = []
-
     # Write metadata, record and wheel files
 
     with archive.open(str(dist_info_path / 'METADATA'), 'w') as metadata_file:
       # Metadata version
 
-      metadata_file.write(f'Metadata-Version: 2.4\n'.encode())
+      metadata_file.write('Metadata-Version: 2.4\n'.encode())
 
       # Name and version
 
@@ -151,7 +143,7 @@ def write_wheel(wheel_directory: str, /, *, editable: bool = False):
 
       # Dependencies
 
-      for dependency in project_metadata.get('dependencies', []) + supp_dependencies:
+      for dependency in project_metadata.get('dependencies', []):
         metadata_file.write(f'Requires-Dist: {dependency}\n'.encode())
 
       # Authors
@@ -234,7 +226,7 @@ def write_wheel(wheel_directory: str, /, *, editable: bool = False):
       record_file.write(record_output.getvalue().encode())
 
     with archive.open(str(dist_info_path / 'WHEEL'), 'w') as wheel_file:
-      wheel_file.write(f'Wheel-Version: 1.0\n'.encode())
+      wheel_file.write('Wheel-Version: 1.0\n'.encode())
 
 
     print('-- Wheel contents --------')
