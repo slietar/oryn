@@ -1,11 +1,6 @@
-import sys
+import tomllib
 from pathlib import Path
 from typing import Any, TypeAlias
-
-if sys.version_info >= (3, 11):
-  import tomllib
-else:
-  import tomli as tomllib
 
 
 TOOL_NAME = 'oryn'
