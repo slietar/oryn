@@ -18,4 +18,4 @@ dependencies = [
 Repository = "https://github.com/slietar/oryn"
 
 [tool.oryn]
-include = ["oryn"]
+include = ["src/*"]
