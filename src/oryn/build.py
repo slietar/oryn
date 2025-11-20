@@ -1,6 +1,7 @@
 import csv
 import re
 import shutil
+import stat
 from io import StringIO
 from pathlib import Path
 from zipfile import ZipFile, ZipInfo
@@ -8,7 +9,7 @@ from zipfile import ZipFile, ZipInfo
 from packaging.licenses import canonicalize_license_expression
 from packaging.version import InvalidVersion, Version
 
-from .inclusion import lookup_file_tree
+from .inclusion import Item, lookup_file_tree
 from .metadata import read_metadata
 
 
@@ -18,6 +19,24 @@ def is_name_valid(unnormalized_name: str, /):
 
 def normalize_name(name: str, /):
   return re.sub(r'[-_.]+', '-', name).lower()
+
+def normalize_path(path: Path, /):
+  part_index = 0
+  new_parts = list[str]()
+
+  while part_index < len(path.parts):
+    match path.parts[part_index]:
+      case '.':
+        pass
+      case '..':
+        if new_parts:
+          new_parts.pop()
+      case part:
+        new_parts.append(part)
+
+    part_index += 1
+
+  return Path(*new_parts)
 
 def process_person_list(person_list: list[str | dict], /):
   names = list[str]()
@@ -71,6 +90,8 @@ def write_wheel(wheel_directory: str, /, *, editable: bool = False):
 
   # Write wheel
 
+  keep_internal_symlinks = True
+
   snake_name = name.replace('-', '_')
   wheel_file_name = f'{snake_name}-{version}-py3-none-any.whl'
 
@@ -105,19 +126,55 @@ def write_wheel(wheel_directory: str, /, *, editable: bool = False):
           file.write(f'{path.as_posix()}\n'.encode())
 
     else:
+      copied_items_by_path = dict[Path, Item]()
+      inclusion_root_names = set[str]()
+
       for item in lookup_file_tree(root_path, tool_metadata):
         if (item is not None) and (item.inclusion_relative_path is not None) and (not item.ignored) and (not item.is_directory):
-          target_path_str = str(item.inclusion_relative_path)
-          target_info = ZipInfo(target_path_str)
+          if item.inclusion_relation == 'target':
+            assert len(item.inclusion_relative_path.parts) == 1
+            name = item.inclusion_relative_path.name
 
-          # Using this instead of archive.write() to erase timestamp
-          with (
-            item.path.open('rb') as source_file,
-            archive.open(target_info, 'w') as target_file
-          ):
-            shutil.copyfileobj(source_file, target_file, 1024 * 8)
+            if name in inclusion_root_names:
+              raise ValueError(f'Conflicting inclusion root name: {name}')
 
-          record_writer.writerow([target_path_str, '', ''])
+            inclusion_root_names.add(name)
+
+          copied_items_by_path[item.path] = item
+
+      for item in copied_items_by_path.values():
+        assert item.inclusion_relative_path is not None
+
+        target_path_str = str(item.inclusion_relative_path)
+        target_info = ZipInfo(target_path_str)
+
+        record_writer.writerow([target_path_str, '', ''])
+
+        if keep_internal_symlinks and item.path.is_symlink():
+          target_path = item.path.readlink()
+
+          if not target_path.is_absolute():
+            target_absolute_path = normalize_path(item.path.parent / target_path)
+            pointed_item = copied_items_by_path.get(target_absolute_path, None)
+
+            if pointed_item is not None:
+              assert pointed_item.inclusion_relative_path is not None
+
+              archive.writestr(
+                target_info,
+                (pointed_item.inclusion_relative_path).relative_to(item.inclusion_relative_path.parent, walk_up=True).as_posix(),
+              )
+
+              target_info.external_attr |= stat.S_IFLNK << 16
+
+              continue
+
+        # Using this instead of archive.write() to erase the timestamp
+        with (
+          item.path.open('rb') as source_file,
+          archive.open(target_info, 'w') as target_file,
+        ):
+          shutil.copyfileobj(source_file, target_file)
 
     # Write metadata, record and wheel files
 
